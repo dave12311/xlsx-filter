@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": [".\\test.xlsx"]
+            "args": [".\\test.xlsx", "-o out.xlsx", "-R 'C\\d\\d'"]
         }
     ]
 }

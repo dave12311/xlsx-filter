@@ -4,6 +4,7 @@ from openpyxl.descriptors.base import String
 import langid
 from math import floor
 import argparse
+import re
 
 langid.set_languages(('ru', 'en'))
 
@@ -12,9 +13,13 @@ parser.add_argument("path", metavar="P", nargs='+', help='Path to file(s) or dir
 parser.add_argument('-v', '--verbose', action='count', default=0)
 parser.add_argument('-o', '--output', metavar="O", help='Path to the output file')
 parser.add_argument('-x', '--overwrite', action='store_const', const=True, default=False, help='Overwrite input files')
-parser.add_argument('-s', '--min-char-single', metavar='MS', type=int, default=10, help='Minimum number of characters required to delete a single language english cell (default: 10')
+regex_group = parser.add_mutually_exclusive_group()
+regex_group.add_argument('-r', '--regex', metavar='R', help='RegEx expression to always delete')
+regex_group.add_argument('-R', '--regex-v', metavar='RV', help='Same as -r, but with verbose output')
+parser.add_argument('-s', '--min-single', metavar='S', type=int, help='Minimum number of characters required to delete a single language english cell')
 
 args = parser.parse_args()
+
 
 # Very dumb function to find the middle '/' in a string
 def split_pair(text: String):
@@ -41,9 +46,9 @@ def split_pair(text: String):
             mid_b = indexes[floor(len(indexes) / 2) - 1]
 
             if len(text) / 2 - mid_a > len(text) / 2 - mid_b:
-                return [text[:mid_a], text[mid_a + 1:]]
-            else:
                 return [text[:mid_b], text[mid_b + 1:]]
+            else:
+                return [text[:mid_a], text[mid_a + 1:]]
         else:
             middle_index = indexes[floor(len(indexes) / 2)]
             return [text[0:middle_index], text[middle_index + 1:]]
@@ -60,40 +65,51 @@ def filter_xlsx(path):
         for row in sheet.iter_rows():
             for cell in row:
 
-                # Check for Russian/English or English/Russian syntax
+                # Delete RegEx matches
+                if args.regex_v is not None:
+                    args.regex = args.regex_v
+                if args.regex is not None:
+                    match = re.match(args.regex, str(cell.value))
+                    if match:
+                        if args.regex_v is not None:
+                            print('RegEx matched: ' + str(cell.value))
+                        cell.value = ''
+                        continue
+
                 if cell.value is not None and str(cell.value)[:1] != '=' and type(cell.value) is not int:
                     text = split_pair(str(cell.value))
 
-                    if len(text) == 1:
+                    # Single language cell
+                    if len(text) == 1 and args.min_single is not None:
                         if args.verbose > 2:
                             print("Single lang: " + text[0])
                         
-                        if len(text[0]) > args.min_char_single:
+                        if len(text[0]) > args.min_single:
                             lang = langid.classify(text[0])
 
                             if lang[0] == 'en':
                                 cell.value = None
 
+                    # Check for ru-en pair
                     elif len(text) == 2:
-                        # Check for ru-en pair
                         lang_a = langid.classify(text[0])
                         lang_b = langid.classify(text[1])
+
+                        if args.verbose > 1:
+                            print("Dual lang [" + lang_a[0] + "/" + lang_b[0] + "]: " + cell.value)
 
                         if lang_a[0] == 'ru' and lang_b[0] == 'en':
                             cell.value = text[0]
                         elif lang_a[0] == 'en' and lang_b[0] == 'ru':
                             cell.value = text[1]
+                        elif lang_a[0] == 'en' and lang_b[0] == 'en' and args.min_single is not None:
+                            if len(text[0]) > args.min_single:
+                                cell.value = None
 
-                        if args.verbose > 1:
-                            print("Dual lang [" + lang_a[0] + "/" + lang_b[0] + "]: " + cell.value)
-                    else:
-                        print("ERROR")
     if args.overwrite is True:
         wb.save(path)
     else:
         wb.save(args.output)
-
-    wb.save(args.output)
 
 def main():
     if (len(args.path) == 1 and args.output is None) or len(args.path) > 1 or args.overwrite is True:
@@ -101,12 +117,13 @@ def main():
         if proceed.upper() == 'Y':
             args.overwrite = True
             for path in args.path:
-                if path[-5:] == '.xlsx':
+                if path[-5:] == '.xlsx' or path[-5:] == '.xlsm':
                     filter_xlsx(path)
                 else:
                     path_obj = Path(path)
-                    for file in path_obj.glob("**/*.xlsx"):
-                        filter_xlsx(file)
+                    for file in path_obj.glob('**/*'):
+                        if file.name.endswith(('.xlsx', '.xlsm')):
+                            filter_xlsx(file)
         else:
             print('Stopping...')
     elif len(args.path) == 1 and args.output is not None:

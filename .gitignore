@@ -1,3 +1,7 @@
 *.xlsx
+*.xlsm
+*.spec
 __pycache__/
 09_10/
+build/
+dist/
