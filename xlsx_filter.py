@@ -117,12 +117,12 @@ def main():
         if proceed.upper() == 'Y':
             args.overwrite = True
             for path in args.path:
-                if path[-5:] == '.xlsx' or path[-5:] == '.xlsm':
+                if path[-5:] == '.xlsx' or path[-5:] == '.xlsm' or path[-5:] == '.xls':
                     filter_xlsx(path)
                 else:
                     path_obj = Path(path)
                     for file in path_obj.glob('**/*'):
-                        if file.name.endswith(('.xlsx', '.xlsm')):
+                        if file.name.endswith(('.xlsx', '.xlsm', '.xls')):
                             filter_xlsx(file)
         else:
             print('Stopping...')
